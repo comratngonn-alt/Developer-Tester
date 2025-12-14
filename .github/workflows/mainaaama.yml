@@ -1,0 +1,81 @@
+name: 😁😁Secure Access To - macOS
+
+on:
+  workflow_dispatch:
+
+jobs:
+  secure-access-macos:
+    runs-on: macos-latest
+    timeout-minutes: 3600
+
+    steps:
+      - name: Locate Tailscale and Check PATH
+        id: locate_ts
+        run: |
+          # Dùng 'which' để tìm vị trí của lệnh
+          TS_PATH=$(which tailscale)
+          if [ -n "$TS_PATH" ]; then
+              echo "Tailscale found at: $TS_PATH"
+              echo "TS_CMD=$TS_PATH" >> $GITHUB_ENV
+          else
+              echo "Tailscale not found. Will attempt installation."
+              # Đặt một đường dẫn mặc định nếu việc cài đặt thất bại
+              echo "TS_CMD=/usr/local/bin/tailscale" >> $GITHUB_ENV 
+              echo "INSTALL_TS=true" >> $GITHUB_ENV
+          fi
+
+      - name: Install Tailscale via Homebrew (if necessary)
+        # Chỉ chạy nếu biến INSTALL_TS được đặt là true
+        if: env.INSTALL_TS == 'true'
+        run: |
+          echo "Installing Tailscale..."
+          brew install tailscale
+          # Cập nhật đường dẫn lệnh sau khi cài đặt
+          TS_PATH=$(which tailscale)
+          if [ -n "$TS_PATH" ]; then
+              echo "TS_CMD=$TS_PATH" >> $GITHUB_ENV
+          else
+              echo "Installation failed. Tailscale command not found."
+              exit 1
+          fi
+          echo "Installation successful."
+
+      - name: Establish Tailscale Connection
+        run: |
+          # Sử dụng biến môi trường TS_CMD đã được xác định/cài đặt
+          TS_CMD="$TS_CMD" 
+          
+          echo "Starting Tailscale using command: $TS_CMD"
+
+          # Bring up Tailscale with the provided auth key and set a unique hostname
+          $TS_CMD up --auth-key=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-macos-$GITHUB_RUN_ID --ssh
+          
+          # Wait for Tailscale to assign an IP
+          TS_IP=""
+          RETRYS=0
+          while [ -z "$TS_IP" ] && [ $RETRYS -lt 10 ]; do
+              TS_IP=$($TS_CMD ip -4)
+              sleep 5
+              RETRYS=$((RETRYS+1))
+          done
+          
+          if [ -z "$TS_IP" ]; then
+              echo "Tailscale IP not assigned. Exiting."
+              exit 1
+          fi
+          echo "TAILSCALE_IP=$TS_IP" >> $GITHUB_ENV
+      
+      - name: Display Connection Info & Maintain Connection
+        run: |
+          echo "TAILSCALE_IP=$TAILSCALE_IP"
+          
+          echo -e "\n=== SECURE ACCESS INFO ==="
+          echo "Address: $TAILSCALE_IP"
+          echo "Protocol: SSH (Port 22)"
+          echo "Username: $(whoami)"
+          echo "==========================\n"
+          
+          while true; do
+              echo "[$(date)] Runner Active - Use Ctrl+C in workflow to terminate"
+              sleep 300
+          done
