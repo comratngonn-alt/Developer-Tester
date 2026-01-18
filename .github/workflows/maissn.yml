@@ -1,12 +1,12 @@
 
-name: RPPPPPss
+name: RPPPPPssQQ
 
 on:
   workflow_dispatch:
 
 jobs:
   secure-rdp:
-    runs-on: windows-2019
+    runs-on: windows-2022
     timeout-minutes: 360000
 
     steps:
